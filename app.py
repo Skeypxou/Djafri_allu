@@ -4,7 +4,7 @@ from datetime import datetime
 from fpdf import FPDF
 import io
 
-# --- CONFIGURATION & TARIFS (Modifiables facilement) ---
+# --- CONFIGURATION & TARIFS ---
 TARIFS_BASE = {
     "Fenêtre": {"Aluminium": 15000, "PVC": 12000},
     "Porte": {"Aluminium": 20000, "PVC": 16000},
@@ -20,9 +20,11 @@ TARIFS_VITRAGE = {
     "Double vitrage teinté": 5000
 }
 
+# AJOUT DE L'OPTION COULISSANT ICI
 TARIFS_OPTIONS = {
     "Ouverture simple": 0,
     "Oscillo-battant": 2000,
+    "Coulissant": 3000,  
     "Volet manuel": 8000,
     "Volet motorisé": 15000,
     "Moustiquaire": 4000
@@ -55,7 +57,7 @@ def calculer_ligne(ligne):
     prix_base = TARIFS_BASE.get(ligne['produit'], {}).get(ligne['materiau'], 0)
     prix_vitrage = surface * TARIFS_VITRAGE.get(ligne['vitrage'], 0)
     prix_options = sum([TARIFS_OPTIONS[opt] for opt in ligne['options'] if opt in TARIFS_OPTIONS])
-    prix_accessoires_fixes = sum([TARIFS_ACCESSOires[acc] for acc in ligne['accessoires'] if acc in TARIFS_ACCESSOIRES])
+    prix_accessoires_fixes = sum([TARIFS_ACCESSOIRES[acc] for acc in ligne['accessoires'] if acc in TARIFS_ACCESSOIRES])
     prix_accessoires_perso = sum([a['prix'] * a['qty'] for a in ligne['accessoires_perso']])
     
     total_ligne = (prix_base + prix_vitrage + prix_options + prix_accessoires_fixes + prix_accessoires_perso) * ligne['quantite']
@@ -69,9 +71,19 @@ def calculer_ligne(ligne):
 # --- CLASSE PDF PERSONNALISÉE ---
 class DevisPDF(FPDF):
     def header(self):
+        # --- INTÉGRATION DU LOGO ---
+        try:
+            # On essaie de mettre l'image (x=10 marge gauche, w=25 largeur)
+            self.image('logo.png', x=10, y=5, w=25)
+            self.set_x(40) # On décale le texte à droite pour ne pas chevaucher le logo
+        except:
+            # Si le fichier logo.png n'est pas dans le dossier, on met juste le texte
+            self.set_x(10)
+
         self.set_font('Helvetica', 'B', 20)
-        self.set_text_color(0, 102, 204) # Bleu
-        self.cell(0, 15, 'DJEFF ALUMINIUM', border=0, align='C', new_x="LMARGIN", new_y="NEXT")
+        self.set_text_color(0, 102, 204) # Bleu Aluminium
+        self.cell(0, 15, 'DJEFF ALUMINIUM', border=0, align='L', new_x="LMARGIN", new_y="NEXT")
+        
         self.set_draw_color(0, 102, 204)
         self.set_line_width(1)
         self.line(10, 25, 200, 25)
