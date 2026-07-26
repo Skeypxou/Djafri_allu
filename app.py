@@ -83,31 +83,37 @@ class CalculateurDevis:
     def __init__(self, marge_beneficiaire=30):
         self.marge = marge_beneficiaire
 
-    def calculer_element(self, largeur_mm, hauteur_mm, hauteur_imposte_mm, type_matiere, type_vitrage, couleur, accessoires, options, quantite=1):
-        # Conversion des dimensions en mètres
+    def calculer_element(self, largeur_mm, hauteur_mm, hauteur_imposte_mm, type_matiere, type_vitrage, couleur, accessoires, options, quantite=1, is_imposte_seule=False):
         largeur_m = largeur_mm / 1000
         hauteur_m = hauteur_mm / 1000
         hauteur_imposte_m = hauteur_imposte_mm / 1000
         
-        # Hauteur totale (Corps + Imposte)
-        hauteur_totale_m = hauteur_m + hauteur_imposte_m
-        
-        # 1. Profilé (Périmètre total)
-        perimetre_ml = 2 * (largeur_m + hauteur_totale_m)
-        
-        # Ajout de la traverse d'imposte (barre horizontale de séparation) si > 0
-        if hauteur_imposte_m > 0:
-            perimetre_ml += largeur_m
+        # Gestion de la logique d'imposte
+        if is_imposte_seule:
+            # Si c'est une imposte seule, la hauteur principale est l'imposte
+            hauteur_totale_m = hauteur_m
+            perimetre_ml = 2 * (largeur_m + hauteur_totale_m)
+            imp_txt = f"Imposte Seule H:{hauteur_mm}mm"
+        else:
+            # Sinon, on additionne la hauteur du vantail et de l'imposte
+            hauteur_totale_m = hauteur_m + hauteur_imposte_m
+            perimetre_ml = 2 * (largeur_m + hauteur_totale_m)
             
+            # Ajout de la traverse d'imposte si > 0
+            if hauteur_imposte_m > 0:
+                perimetre_ml += largeur_m
+            imp_txt = f" + Imposte:{hauteur_imposte_mm}mm" if hauteur_imposte_mm > 0 else ""
+            
+        # 1. Profilé
         prix_profil = get_prix('Matière', type_matiere)
         cout_profil = perimetre_ml * prix_profil
         
-        # 2. Vitrage (Surface totale incluant l'imposte)
+        # 2. Vitrage
         surface_m2 = largeur_m * hauteur_totale_m
         prix_vitrage = get_prix('Matière', type_vitrage)
         cout_vitrage = surface_m2 * prix_vitrage
         
-        # 3. Couleur (Supplément par ml sur tout le périmètre + traverse)
+        # 3. Couleur
         sup_color = get_prix('Couleur', couleur)
         cout_couleur = perimetre_ml * sup_color
         
@@ -119,8 +125,6 @@ class CalculateurDevis:
         cout_revient = (cout_profil + cout_vitrage + cout_couleur + cout_accessoires + cout_options) * quantite
         prix_vente = cout_revient * (1 + self.marge / 100)
         
-        # Texte détaillé pour le PDF
-        imp_txt = f" + Imposte:{hauteur_imposte_mm}mm" if hauteur_imposte_mm > 0 else ""
         details = f"L:{largeur_mm}x H:{hauteur_mm}mm{imp_txt} | Mat: {type_matiere} | Vit: {type_vitrage} | Col: {couleur}"
         
         return {
@@ -276,18 +280,32 @@ def view_devis():
     st.subheader("🛠️ Configuration du Produit")
     
     col_c1, col_c2 = st.columns(2)
-    categories = ["Fenêtre 1 vantail", "Fenêtre 2 vantaux", "Fenêtre Coulissante", "Fenêtre Oscillo-battante",
-                  "Porte simple", "Porte double", "Porte vitrée", "Baie vitrée 2 rails", "Baie vitrée 3 rails", 
-                  "Baie vitrée 4 rails", "Portail Battant", "Portail Coulissant", "Rideau Métallique Manuel", 
-                  "Rideau Métallique Motorisé", "Véranda", "Façade vitrée"]
+    # Liste des produits avec les impostes ajoutées
+    categories = [
+        "Fenêtre 1 vantail", "Fenêtre 2 vantaux", "Fenêtre Coulissante", "Fenêtre Oscillo-battante",
+        "Fenêtre avec Imposte", 
+        "Porte simple", "Porte double", "Porte vitrée", "Porte avec Imposte", 
+        "Baie vitrée 2 rails", "Baie vitrée 3 rails", "Baie vitrée 4 rails", 
+        "Portail Battant", "Portail Coulissant", "Rideau Métallique Manuel", 
+        "Rideau Métallique Motorisé", "Véranda", "Façade vitrée", "Imposte Seule"
+    ]
     type_produit = col_c1.selectbox("Type de Produit", categories)
     couleur = col_c2.selectbox("Couleur", ["Blanc", "Noir", "Gris Anthracite", "Bronze", "Imitation Bois", "Chêne Doré", "Acajou"])
     
-    # Dimensions (Largeur, Hauteur, Imposte)
+    # Gestion dynamique des labels selon le type de produit
+    is_imposte_seule = (type_produit == "Imposte Seule")
+    
     col_d1, col_d2, col_d3 = st.columns(3)
     largeur = col_d1.number_input("Largeur (mm)", 300, 6000, 1200, step=50)
-    hauteur = col_d2.number_input("Hauteur Vantail (mm)", 300, 6000, 1000, step=50)
-    hauteur_imposte = col_d3.number_input("Hauteur Imposte (mm) - 0 si aucune", 0, 3000, 0, step=50)
+    
+    if is_imposte_seule:
+        hauteur = col_d2.number_input("Hauteur Imposte (mm)", 300, 3000, 500, step=50)
+        hauteur_imposte = col_d3.number_input("Ignorer (laisser 0)", 0, 0, 0, step=1, help="Ce champ n'est pas utilisé pour l'imposte seule.")
+        h_imposte_val = 0
+    else:
+        hauteur = col_d2.number_input("Hauteur Vantail (mm)", 300, 6000, 1000, step=50)
+        hauteur_imposte = col_d3.number_input("Hauteur Imposte (mm) - 0 si aucune", 0, 3000, 0, step=50)
+        h_imposte_val = hauteur_imposte
     
     col_e1, col_e2 = st.columns(2)
     matiere = col_e1.selectbox("Matière Profilé", ["Profilé Aluminium", "Profilé PVC"])
@@ -301,8 +319,9 @@ def view_devis():
     
     if st.button("➕ Calculer et Ajouter au Devis", type="primary"):
         calc = CalculateurDevis(marge_beneficiaire=marge)
-        # Passage de la hauteur d'imposte au calculateur
-        result = calc.calculer_element(largeur, hauteur, hauteur_imposte, matiere, vitrage, couleur, accessoires, options, quantite)
+        result = calc.calculer_element(
+            largeur, hauteur, h_imposte_val, matiere, vitrage, couleur, accessoires, options, quantite, is_imposte_seule
+        )
         
         if 'panier_devis' not in st.session_state:
             st.session_state.panier_devis = []
@@ -310,184 +329,4 @@ def view_devis():
             'designation': type_produit,
             'details': result['details'],
             'quantite': quantite,
-            'prix_unitaire': round(result['prix_vente']/quantite, 2),
-            'total': result['prix_vente'],
-            'marge': result['marge']
-        })
-        st.success(f"Ajouté ! Prix: {result['prix_vente']:,.2f} DA (Marge: {result['marge']:,.2f} DA)")
-        st.rerun()
-
-    if 'panier_devis' in st.session_state and st.session_state.panier_devis:
-        st.markdown("---")
-        st.subheader("🧾 Composition du Devis")
-        df_panier = pd.DataFrame(st.session_state.panier_devis)
-        st.dataframe(df_panier[['designation', 'details', 'quantite', 'prix_unitaire', 'total']], use_container_width=True, hide_index=True)
-        
-        total_devis = df_panier['total'].sum()
-        marge_devis = df_panier['marge'].sum()
-        st.metric("Total Devis", f"{total_devis:,.2f} DA")
-        
-        if st.button("💾 Sauvegarder et Générer PDF"):
-            year = datetime.datetime.now().year
-            count = execute_query("SELECT COUNT(*) as c FROM devis", fetch=True).iloc[0]['c']
-            numero = f"DEV-{year}-{count+1:04d}"
-            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-            
-            devis_id = execute_query(
-                "INSERT INTO devis (numero, client_id, date, total, marge, statut) VALUES (?, ?, ?, ?, ?, ?)",
-                (numero, int(client_id), date_str, total_devis, marge_devis, "Brouillon")
-            )
-            for item in st.session_state.panier_devis:
-                execute_query(
-                    "INSERT INTO lignes_devis (devis_id, designation, details, quantite, prix_unitaire, total) VALUES (?, ?, ?, ?, ?, ?)",
-                    (devis_id, item['designation'], item['details'], item['quantite'], item['prix_unitaire'], item['total'])
-                )
-            
-            client_info = execute_query("SELECT * FROM clients WHERE id=?", (int(client_id),), fetch=True).iloc[0]
-            filename = generate_devis_pdf({'numero': numero, 'date': date_str, 'total': total_devis}, client_info, st.session_state.panier_devis)
-            
-            with open(filename, "rb") as f:
-                st.download_button("📥 Télécharger le PDF", f, file_name=filename, mime="application/pdf")
-            
-            del st.session_state.panier_devis
-            st.success("Devis sauvegardé en base de données avec succès !")
-
-def view_tarifs():
-    st.title("💰 Administration des Tarifs (DA)")
-    st.info("Modifiez directement les cellules du tableau, puis cliquez sur Sauvegarder.")
-    
-    df = execute_query("SELECT id, categorie, nom, prix, unite FROM tarifs", fetch=True)
-    gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_grid_options(domLayout='autoHeight')
-    gb.configure_column('prix', editable=True)
-    gb.configure_column('id', hide=True)
-    gridOptions = gb.build()
-    
-    grid_response = AgGrid(df, gridOptions=gridOptions, update_mode='VALUE_CHANGED', fit_columns_on_grid_load=True)
-    updated_df = grid_response['data']
-    
-    if st.button("Sauvegarder les modifications"):
-        for idx, row in updated_df.iterrows():
-            current_prix = execute_query("SELECT prix FROM tarifs WHERE id=?", (int(row['id']),), fetch=True).iloc[0]['prix']
-            if current_prix != row['prix']:
-                execute_query("INSERT INTO historique_prix (item, ancien_prix, nouveau_prix, date) VALUES (?, ?, ?, ?)",
-                              (row['nom'], current_prix, row['prix'], datetime.datetime.now().strftime("%Y-%m-%d %H:%M")))
-                execute_query("UPDATE tarifs SET prix=? WHERE id=?", (row['prix'], int(row['id'])))
-        st.success("Tarifs mis à jour avec succès !")
-        st.rerun()
-
-def view_stock():
-    st.title("📦 Gestion du Stock")
-    df_stock = execute_query("SELECT id, nom, categorie, quantite, seuil_alerte FROM stock", fetch=True)
-    
-    st.subheader("État du Stock")
-    st.dataframe(df_stock[['nom', 'categorie', 'quantite', 'seuil_alerte']], use_container_width=True, hide_index=True)
-    
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("➕ Entrée en Stock")
-        with st.form("entree_stock"):
-            nom_entree = st.text_input("Nom du produit")
-            qte_entree = st.number_input("Quantité entrée", 1.0, 10000.0, 1.0)
-            if st.form_submit_button("Ajouter"):
-                existing = execute_query("SELECT id, quantite FROM stock WHERE nom=?", (nom_entree,), fetch=True)
-                if not existing.empty:
-                    new_qte = existing.iloc[0]['quantite'] + qte_entree
-                    execute_query("UPDATE stock SET quantite=? WHERE id=?", (new_qte, existing.iloc[0]['id']))
-                else:
-                    execute_query("INSERT INTO stock (nom, categorie, quantite, seuil_alerte) VALUES (?, ?, ?, ?)", (nom_entree, 'Non spécifié', qte_entree, 10))
-                st.success("Entrée enregistrée !")
-                st.rerun()
-
-    with col2:
-        st.subheader("➖ Sortie de Stock")
-        with st.form("sortie_stock"):
-            nom_sortie = st.selectbox("Produit", df_stock['nom'].unique() if not df_stock.empty else [])
-            qte_sortie = st.number_input("Quantité sortie", 1.0, 10000.0, 1.0)
-            if st.form_submit_button("Retirer"):
-                prod = df_stock[df_stock['nom'] == nom_sortie].iloc[0]
-                if prod['quantite'] >= qte_sortie:
-                    new_qte = prod['quantite'] - qte_sortie
-                    execute_query("UPDATE stock SET quantite=? WHERE id=?", (new_qte, prod['id']))
-                    st.success("Sortie enregistrée !")
-                    st.rerun()
-                else:
-                    st.error("Stock insuffisant !")
-
-def view_fournisseurs():
-    st.title("🚚 Gestion des Fournisseurs")
-    with st.form("add_fournisseur"):
-        col1, col2 = st.columns(2)
-        nom = col1.text_input("Nom du Fournisseur")
-        tel = col2.text_input("Téléphone")
-        email = col1.text_input("Email")
-        adresse = col2.text_input("Adresse")
-        produits = st.text_input("Produits fournis")
-        if st.form_submit_button("Ajouter Fournisseur", type="primary"):
-            execute_query("INSERT INTO fournisseurs (nom, telephone, email, adresse, produits) VALUES (?, ?, ?, ?, ?)",
-                          (nom, tel, email, adresse, produits))
-            st.success("Fournisseur ajouté !")
-            st.rerun()
-            
-    st.subheader("Liste des Fournisseurs")
-    st.dataframe(execute_query("SELECT * FROM fournisseurs", fetch=True), use_container_width=True, hide_index=True)
-
-def view_parametres():
-    st.title("⚙️ Paramètres Système")
-    st.subheader("Historique des Prix")
-    df_hist = execute_query("SELECT item, ancien_prix, nouveau_prix, date FROM historique_prix ORDER BY date DESC LIMIT 50", fetch=True)
-    if not df_hist.empty:
-        st.dataframe(df_hist, use_container_width=True, hide_index=True)
-    else:
-        st.info("Aucune modification de prix enregistrée pour le moment.")
-
-
-# ==========================================
-# 5. POINT D'ENTRÉE PRINCIPAL
-# ==========================================
-def main():
-    st.set_page_config(page_title="DJEFF ALUMINIUM PRO V2", page_icon="🏗️", layout="wide")
-    init_db()
-    
-    st.markdown("""
-    <style>
-        .main { background-color: #f8fafc; }
-        .stButton>button { background-color: #1e3a8a; color: white; border-radius: 8px; border: none; }
-        .stButton>button:hover { background-color: #1e40af; color: white; }
-        [data-testid="stMetricValue"] { color: #1e3a8a; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    with st.sidebar:
-        st.image("https://img.icons8.com/fluency/96/construction.png", width=80)
-        st.markdown("### DJEFF ALUMINIUM ERP")
-        selected = option_menu(
-            "Menu Principal",
-            ["🏠 Tableau de bord", "👤 Clients", "📄 Devis", "💰 Tarifs", "📦 Stock", "🚚 Fournisseurs", "⚙️ Paramètres"],
-            icons=['house', 'person', 'file-earmark-text', 'cash-coin', 'box-seam', 'truck', 'gear'],
-            menu_icon="list",
-            default_index=0,
-            styles={"container": {"padding": "5px", "background-color": "#ffffff"}, 
-                    "icon": {"color": "#1e3a8a", "font-size": "18px"}, 
-                    "nav-link": {"color": "#000000", "font-size": "14px", "text-align": "left", "margin": "0px", "--hover-color": "#eff6ff"},
-                    "nav-link-selected": {"background-color": "#1e3a8a", "color": "white"}}
-        )
-
-    if selected == "🏠 Tableau de bord":
-        view_dashboard()
-    elif selected == "👤 Clients":
-        view_clients()
-    elif selected == "📄 Devis":
-        view_devis()
-    elif selected == "💰 Tarifs":
-        view_tarifs()
-    elif selected == "📦 Stock":
-        view_stock()
-    elif selected == "🚚 Fournisseurs":
-        view_fournisseurs()
-    elif selected == "⚙️ Paramètres":
-        view_parametres()
-
-if __name__ == "__main__":
-    main()
+            'prix_unitaire': round(result['prix
