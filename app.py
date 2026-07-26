@@ -74,3 +74,49 @@ def get_df(query, params=()):
     df = pd.read_sql_query(query, conn, params=params)
     conn.close()
     return df
+    import database as db
+
+def get_prix(categorie, nom):
+    res = db.execute_query("SELECT prix FROM tarifs WHERE categorie=? AND nom=?", (categorie, nom), fetch=True)
+    return res[0]['prix'] if res else 0
+
+def calculer_menuiserie(produit, largeur, hauteur, matiere, vitrage, couleur, accessoires, options, quantite, marge):
+    # 1. Calcul des dimensions
+    largeur_m = largeur / 1000
+    hauteur_m = hauteur / 1000
+    perimetre_ml = 2 * (largeur_m + hauteur_m)
+    surface_m2 = largeur_m * hauteur_m
+
+    # 2. Coût matière première
+    prix_profil = get_prix('Matière', f'Profilé {matiere}')
+    prix_vitrage = get_prix('Matière', vitrage)
+    
+    cout_profil = perimetre_ml * prix_profil
+    cout_vitrage = surface_m2 * prix_vitrage
+
+    # 3. Coût accessoires
+    cout_accessoires = sum([get_prix('Accessoire', a) for a in accessoires])
+
+    # 4. Coût options
+    cout_options = sum([get_prix('Option', o) for o in options])
+
+    # 5. Supplément couleur
+    suppl_couleur = get_prix('Couleur', couleur) * perimetre_ml
+
+    # 6. Total coutant
+    coutant_unitaire = cout_profil + cout_vitrage + cout_accessoires + cout_options + suppl_couleur
+
+    # 7. Prix de vente avec marge
+    prix_vente_unitaire = coutant_unitaire * (1 + (marge / 100))
+    total_ligne = prix_vente_unitaire * quantite
+
+    designation = f"{produit} {matiere} ({largeur}x{hauteur}mm) - {vitrage} - {couleur}"
+    
+    return {
+        "designation": designation,
+        "largeur": largeur,
+        "hauteur": hauteur,
+        "quantite": quantite,
+        "prix_unitaire": round(prix_vente_unitaire, 2),
+        "total_ligne": round(total_ligne, 2)
+    }
