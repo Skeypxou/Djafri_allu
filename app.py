@@ -1,3 +1,10 @@
+Voici le code complet mis à jour. J'ai ajouté l'option **"Coulissant"** dans les tarifs, et j'ai intégré le **logo** dans l'en-tête du PDF. 
+
+**ATTENTION :** Pour que le logo s'affiche sur le PDF, tu dois absolument avoir un fichier image nommé exactement `logo.png` dans le même dossier que ce fichier `app.py`. (Tu peux prendre n'importe quelle image de fenêtre/aluminium trouvée sur internet et la renommer `logo.png`).
+
+Copie et remplace tout ton fichier `app.py` par ceci :
+
+```python
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -314,3 +321,4 @@ if st.session_state.lignes:
 
 else:
     st.info("Aucun produit ajouté pour le moment. Utilisez le formulaire ci-dessus.")
+```
