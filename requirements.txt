@@ -1,5 +1,7 @@
-streamlit
-pandas
-fpdf2
-plotly
-streamlit-option-menu
+streamlit==1.33.0
+streamlit-option-menu==0.3.12
+streamlit-aggrid==0.3.4.post3
+plotly==5.20.0
+pandas==2.2.1
+fpdf2==2.7.8
+Pillow==10.3.0
