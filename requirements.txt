@@ -1,3 +1,5 @@
-streamlit
-pandas
-fpdf2
+streamlit==1.33.0
+pandas==2.2.1
+plotly==5.20.0
+fpdf2==2.7.9
+streamlit-option-menu==0.3.12
