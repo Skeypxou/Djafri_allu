@@ -24,7 +24,6 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS lignes_devis (id INTEGER PRIMARY KEY AUTOINCREMENT, devis_id INTEGER, designation TEXT, details TEXT, quantite REAL, prix_unitaire REAL, total REAL, FOREIGN KEY(devis_id) REFERENCES devis(id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS historique_prix (id INTEGER PRIMARY KEY AUTOINCREMENT, item TEXT, ancien_prix REAL, nouveau_prix REAL, date TEXT)''')
 
-    # Données par défaut
     c.execute("SELECT COUNT(*) FROM tarifs")
     if c.fetchone()[0] == 0:
         defaults = [
@@ -78,38 +77,57 @@ def get_prix(categorie, nom):
 
 
 # ==========================================
-# 2. MOTEUR DE CALCUL
+# 2. MOTEUR DE CALCUL (AVEC IMPOSTE)
 # ==========================================
 class CalculateurDevis:
     def __init__(self, marge_beneficiaire=30):
         self.marge = marge_beneficiaire
 
-    def calculer_element(self, largeur_mm, hauteur_mm, type_matiere, type_vitrage, couleur, accessoires, options, quantite=1):
+    def calculer_element(self, largeur_mm, hauteur_mm, hauteur_imposte_mm, type_matiere, type_vitrage, couleur, accessoires, options, quantite=1):
+        # Conversion des dimensions en mètres
         largeur_m = largeur_mm / 1000
         hauteur_m = hauteur_mm / 1000
+        hauteur_imposte_m = hauteur_imposte_mm / 1000
         
-        perimetre_ml = 2 * (largeur_m + hauteur_m)
+        # Hauteur totale (Corps + Imposte)
+        hauteur_totale_m = hauteur_m + hauteur_imposte_m
+        
+        # 1. Profilé (Périmètre total)
+        perimetre_ml = 2 * (largeur_m + hauteur_totale_m)
+        
+        # Ajout de la traverse d'imposte (barre horizontale de séparation) si > 0
+        if hauteur_imposte_m > 0:
+            perimetre_ml += largeur_m
+            
         prix_profil = get_prix('Matière', type_matiere)
         cout_profil = perimetre_ml * prix_profil
         
-        surface_m2 = largeur_m * hauteur_m
+        # 2. Vitrage (Surface totale incluant l'imposte)
+        surface_m2 = largeur_m * hauteur_totale_m
         prix_vitrage = get_prix('Matière', type_vitrage)
         cout_vitrage = surface_m2 * prix_vitrage
         
+        # 3. Couleur (Supplément par ml sur tout le périmètre + traverse)
         sup_color = get_prix('Couleur', couleur)
         cout_couleur = perimetre_ml * sup_color
         
+        # 4. Accessoires & Options
         cout_accessoires = sum([get_prix('Accessoire', a) for a in accessoires])
         cout_options = sum([get_prix('Option', o) for o in options])
         
+        # 5. Total
         cout_revient = (cout_profil + cout_vitrage + cout_couleur + cout_accessoires + cout_options) * quantite
         prix_vente = cout_revient * (1 + self.marge / 100)
+        
+        # Texte détaillé pour le PDF
+        imp_txt = f" + Imposte:{hauteur_imposte_mm}mm" if hauteur_imposte_mm > 0 else ""
+        details = f"L:{largeur_mm}x H:{hauteur_mm}mm{imp_txt} | Mat: {type_matiere} | Vit: {type_vitrage} | Col: {couleur}"
         
         return {
             'cout_revient': round(cout_revient, 2),
             'prix_vente': round(prix_vente, 2),
             'marge': round(prix_vente - cout_revient, 2),
-            'details': f"{largeur_mm}x{hauteur_mm}mm | Mat: {type_matiere} | Vit: {type_vitrage} | Col: {couleur}"
+            'details': details
         }
 
 
@@ -265,9 +283,11 @@ def view_devis():
     type_produit = col_c1.selectbox("Type de Produit", categories)
     couleur = col_c2.selectbox("Couleur", ["Blanc", "Noir", "Gris Anthracite", "Bronze", "Imitation Bois", "Chêne Doré", "Acajou"])
     
-    col_d1, col_d2 = st.columns(2)
+    # Dimensions (Largeur, Hauteur, Imposte)
+    col_d1, col_d2, col_d3 = st.columns(3)
     largeur = col_d1.number_input("Largeur (mm)", 300, 6000, 1200, step=50)
-    hauteur = col_d2.number_input("Hauteur (mm)", 300, 6000, 1000, step=50)
+    hauteur = col_d2.number_input("Hauteur Vantail (mm)", 300, 6000, 1000, step=50)
+    hauteur_imposte = col_d3.number_input("Hauteur Imposte (mm) - 0 si aucune", 0, 3000, 0, step=50)
     
     col_e1, col_e2 = st.columns(2)
     matiere = col_e1.selectbox("Matière Profilé", ["Profilé Aluminium", "Profilé PVC"])
@@ -281,7 +301,8 @@ def view_devis():
     
     if st.button("➕ Calculer et Ajouter au Devis", type="primary"):
         calc = CalculateurDevis(marge_beneficiaire=marge)
-        result = calc.calculer_element(largeur, hauteur, matiere, vitrage, couleur, accessoires, options, quantite)
+        # Passage de la hauteur d'imposte au calculateur
+        result = calc.calculer_element(largeur, hauteur, hauteur_imposte, matiere, vitrage, couleur, accessoires, options, quantite)
         
         if 'panier_devis' not in st.session_state:
             st.session_state.panier_devis = []
@@ -453,7 +474,7 @@ def main():
                     "nav-link-selected": {"background-color": "#1e3a8a", "color": "white"}}
         )
 
-    if selected == "🏠 Tableau de board":
+    if selected == "🏠 Tableau de bord":
         view_dashboard()
     elif selected == "👤 Clients":
         view_clients()
