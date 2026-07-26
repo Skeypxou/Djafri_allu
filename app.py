@@ -494,4 +494,3 @@ elif selected == 'Fournisseurs':
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("Aucun fournisseur enregistré.")
-```
